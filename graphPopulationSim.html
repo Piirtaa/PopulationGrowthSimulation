@@ -1,0 +1,359 @@
+<html lang="en" >
+
+<head>
+<meta charset="utf-8"/>
+	<!-- Load plotly.js into the DOM -->
+	<!-- 
+		<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+	-->
+<script src='plotly-latest.min.js'></script>
+<script type="text/javascript">
+//ths simulation engine
+		
+	var Sim = 
+	{
+		config : {
+			reproductionAgeInYears : 15,
+			postPregnancyDelayMonths : 24,
+			initialPopulation : 1000,
+			deathAgeInYears : 75,
+			yearsToSimulate : 150,
+			maxNumberOfKids : 5,
+			stopSimAtPopulation : 10000000	
+		},
+		simulate : function(onEachMonth)
+		{
+			//state
+			var allLivingWomen = [];  
+			var allLivingMen = [];
+			var allDead = 0; //[];
+			var currentMonth = 0;
+			var personNumber=0;
+	
+			//results
+			var rv = 
+			{
+				plotData :
+				{
+					x: [],
+					y: [],
+					type: 'scatter'	
+				},
+				monthsPassed : 0,
+				totalLivingWomen : 0,
+				totalLivingMen : 0,
+				totalDead : 0
+			}
+					
+			function man()
+			{
+				//this.mom = null;
+				//this.dad = null;
+				this.ageInMonths = -9;
+				this.birthMonth=currentMonth;
+				this.personNumber = ++personNumber;
+				this.canSire = function()
+				{
+					if (this.ageInMonths >= Sim.config.reproductionAgeInYears * 12) 
+						return true;
+					return false;	
+				}
+			};
+	
+			function woman()
+			{
+				//this.mom = null;
+				//this.dad = null;
+				this.ageInMonths = -9;
+				this.birthMonth=currentMonth;
+				this.personNumber = ++personNumber;
+				this.kids = 0;//[];
+				this.currentPregnancyEnd=null;
+				this.isPregnant = function()
+				{
+					if (this.currentPregnancyStart == null) 
+						return false;
+					
+					if (this.currentPregnancyEnd > currentMonth)
+					{	
+						return true;
+					}
+						
+					return false;
+				}
+
+				this.isInterestedInSex = function()
+				{
+					var lastPregEnd = this.currentPregnancyEnd;
+					if(lastPregEnd == null)
+						return true;
+					
+					var interestMonth = (lastPregEnd + Sim.config.postPregnancyDelayMonths);
+					
+					//console.log("interest month " + interestMonth);
+					
+					//check if they were recently pregnant and not ready for another one yet	
+					if (currentMonth < (lastPregEnd + Sim.config.postPregnancyDelayMonths)) 
+						return false;
+
+					return true;
+				}
+				this.canGetPregnant = function()
+				{
+					//too young
+					if (this.ageInMonths < Sim.config.reproductionAgeInYears * 12) 
+						return false;
+						
+						
+					//got enough kids already holy shit	
+					if (this.kids >= Sim.config.maxNumberOfKids) 
+					{	
+						//console.log("maxed out at " + this.kids); 
+						return false;
+					}	
+					//already pregnant einstein	
+					if (this.isPregnant()) 
+					{
+						//console.log("currently pregnant.  preg end at " + this.currentPregnancyEnd);
+						return false;
+					}
+					
+					//fuck off weirdo	
+					if (!this.isInterestedInSex())
+					{	
+						//console.log("not interested in sex.  preg end at " + this.currentPregnancyEnd);
+						return false; 
+					}
+					return true;
+				}
+				this.makePregnant = function()
+				{
+					if (this.canGetPregnant() == false) 
+						return false;
+					
+					for (var i = 0; i < allLivingMen.length; i++) 
+					{
+						var nextGuy = allLivingMen[i];
+						if(nextGuy.canSire())
+						{
+							this.currentPregnancyEnd = currentMonth + 9;
+							var isMaleKid = (Math.random() >= 0.5);
+							if(isMaleKid)
+							{
+								var newman = new man()
+								//newman.mom = this;
+								//newman.dad = nextGuy;
+								allLivingMen.push(newman);
+								this.kids++;//.push(newman);
+								//console.log("mom " + this.personNumber + " birthing boy# " + this.kids + " " + newman.personNumber);
+							}
+							else
+							{
+								var newwoman= new woman()
+								//newwoman.mom = this;
+								//newwoman.dad = nextGuy;
+								allLivingWomen.push(newwoman);
+								this.kids++;//.push(newwoman);
+								//console.log("mom " + this.personNumber + " birthing girl# " + this.kids + " " + newwoman.personNumber);
+							}	
+							return true;		
+						}
+					}
+					return false;
+				}	
+			}
+
+
+			function run(onEachMonth)
+			{
+				//initialize
+				for(var i=1; i<= Sim.config.initialPopulation / 2; i++)
+				{
+					allLivingWomen.push((()=>{
+						var newwoman = new woman()
+						newwoman.ageInMonths = Sim.config.reproductionAgeInYears * 12;
+						return newwoman;
+					})());
+					
+					allLivingMen.push((()=>{
+						var newman = new man()
+						newman.ageInMonths = Sim.config.reproductionAgeInYears * 12;
+						return newman;
+					})());
+				}
+			
+				//iterate month by month
+				while(currentMonth < Sim.config.yearsToSimulate * 12) 
+				{
+					//end condition check
+					if ( (allLivingWomen.length + allLivingMen.length) >= Sim.config.stopSimAtPopulation)
+						break;
+					
+					//breeding cycle	
+					var newKids=0;
+					allLivingWomen.forEach((each) => 
+					{ 
+						if(each.makePregnant())
+							newKids++;
+					});
+				
+					//death cycle
+					var newDead=0;			
+					var newAllLivingWomen = [];
+					allLivingWomen.forEach((each) => 
+					{
+						if(each.ageInMonths >= Sim.config.deathAgeInYears * 12)
+						{
+							//console.log("mom " + each.personNumber + " dying ");
+							newDead++;
+							allDead++;//.add(each);				
+						}
+						else
+						{
+							newAllLivingWomen.push(each);
+						}
+					});
+					allLivingWomen = newAllLivingWomen;
+								
+					var newAllLivingMen = [];
+					allLivingMen.forEach((each) => 
+					{
+						if(each.ageInMonths >= Sim.config.deathAgeInYears * 12)
+						{
+							//console.log("dad " + each.personNumber + " dying ");
+							newDead++;			
+							allDead++;//.add(each);				
+						}
+						else
+						{
+							newAllLivingMen.push(each);
+						}
+					});
+					allLivingMen = newAllLivingMen;
+					
+					if((newKids + newDead) > 0)
+					{
+						console.log("currentMonth" + currentMonth);
+						console.log("year" + (currentMonth / 12));
+						console.log("new kids added " + newKids);
+						console.log("new dead removed " + newDead );
+						console.log("total " + (allLivingMen.length + allLivingWomen.length));
+						console.log("------");
+					}
+
+					
+					//update results
+					rv.plotData.x.push(currentMonth);
+					rv.plotData.y.push((allLivingMen.length + allLivingWomen.length));
+
+					rv.monthsPassed = currentMonth;
+					rv.totalLivingWomen = allLivingWomen.length;
+					rv.totalLivingMen = allLivingMen.length;
+					rv.totalDead = allDead;
+				
+					//invoke event strategy
+					//if(onEachMonth)
+					//	onEachMonth(rv);
+						
+					//time cycle
+					currentMonth++;
+					
+					allLivingWomen.forEach((each) => 
+					{ 
+						each.ageInMonths++;
+					});
+					allLivingMen.forEach((each) => 
+					{ 
+						each.ageInMonths++;
+					});
+					
+				}	
+				
+				//report results
+				console.log("currentMonth:" + currentMonth);
+				console.log("total years passed:" + (currentMonth/12));
+				console.log("allLivingWomen:" + allLivingWomen.length);
+				console.log("allLivingMen:" + allLivingMen.length);
+				console.log("totalLiving:" + (allLivingMen.length + allLivingWomen.length));		
+				console.log("allDead:" + allDead);
+				
+				return rv;	
+			}
+		
+			return run(onEachMonth);
+		}
+	};
+	
+	</script>
+</head>
+
+<body>
+	<div width="100%">
+    <br>Reproduction Age In Years &nbsp;<input type="text" id="reproductionAge" />
+    <br>Months Between Pregnancies &nbsp;<input type="text" id="pregnancyDelay" />
+    <br>Initial Breeding Population &nbsp;<input type="text" id="initialPopulation" />
+    <br>Death Age In Years &nbsp;<input type="text" id="deathAge" />
+    <br>Max Kids Per Mom &nbsp;<input type="text" id="maxKids" />
+    <br>
+    <br>Whichever comes first:
+    <br>&nbsp;&nbsp;Years to Simulate &nbsp;<input type="text" id="simYears" />
+    <br>&nbsp;&nbsp;Simulate to Population&nbsp;<input type="text" id="simToPopulation" />
+    <br><button id="run" type="submit">Simulate</button>
+	</div>
+  
+	<div id='myDiv'><!-- Plotly chart will be drawn inside this DIV --></div>
+
+	<script type="text/javascript" >
+	//the UI behaviour
+
+	//helpers:	
+	//wires an event handler to an element
+	var bind = function (element, type, handler)
+	{
+		if (element.addEventListener) {
+			element.addEventListener(type, handler, false);
+		} else {
+			element.attachEvent('on'+type, handler);
+		}			
+	};
+
+	//wire up the page events
+	(function()
+	{
+		//first hydrate the page elements
+		document.getElementById("reproductionAge").value = Sim.config.reproductionAgeInYears;
+		document.getElementById("pregnancyDelay").value = Sim.config.postPregnancyDelayMonths;
+		document.getElementById("initialPopulation").value = Sim.config.initialPopulation;
+		document.getElementById("deathAge").value = Sim.config.deathAgeInYears;
+		document.getElementById("maxKids").value = Sim.config.maxNumberOfKids;
+		document.getElementById("simYears").value = Sim.config.yearsToSimulate;
+		document.getElementById("simToPopulation").value = Sim.config.stopSimAtPopulation;
+    
+		
+		//when encrypt is clicked, set model.payload
+		bind(document.getElementById("run"), "click", function(e){
+		
+			if (!e) var e = window.event;
+			// e gives access to the event in all browsers
+	    	e.preventDefault();
+	    	
+	    	//hydrate config
+	    	Sim.config.reproductionAgeInYears = parseInt(document.getElementById("reproductionAge").value);
+			Sim.config.postPregnancyDelayMonths = parseInt(document.getElementById("pregnancyDelay").value);
+			Sim.config.initialPopulation = parseInt(document.getElementById("initialPopulation").value);
+			Sim.config.deathAgeInYears = parseInt(document.getElementById("deathAge").value);
+			Sim.config.maxNumberOfKids = parseInt(document.getElementById("maxKids").value);
+			Sim.config.yearsToSimulate = parseInt(document.getElementById("simYears").value);
+			Sim.config.stopSimAtPopulation = parseInt(document.getElementById("simToPopulation").value);
+			
+			var rv = Sim.simulate();
+			var plotData = [rv.plotData];
+			Plotly.newPlot('myDiv', plotData);
+			
+			
+	  	});
+
+	})();
+	</script>
+</body>
+</html>
